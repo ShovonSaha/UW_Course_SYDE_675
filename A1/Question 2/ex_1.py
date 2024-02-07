@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
+from sklearn.neighbors import KNeighborsClassifier
 from torchvision import datasets, transforms
 
 # Load MNIST training dataset
@@ -29,51 +30,32 @@ split = int(0.8 * len(X_2d))
 X_train, X_test = X_2d[:split], X_2d[split:]
 y_train, y_test = y_34[:split], y_34[split:]
 
-def euclidean_distance(x1, x2):
-    return np.sqrt(np.sum((x1 - x2)**2))
-
-def predict(X_train, y_train, x_test, k):
-    distances = []
-    for i in range(len(X_train)):
-        dist = euclidean_distance(x_test, X_train[i])
-        distances.append((dist, y_train[i]))
-    distances = sorted(distances)[:k]
-    labels = [dist[1] for dist in distances]
-    return max(set(labels), key=labels.count)
-
-def k_nearest_neighbors(X_train, y_train, X_test, k):
-    predictions = []
-    correct = 0
-    for i in range(len(X_test)):
-        prediction = predict(X_train, y_train, X_test[i], k)
-        predictions.append(prediction)
-        if prediction == y_test[i]:
-            correct += 1
-    accuracy = (correct / len(X_test)) * 100
-    return accuracy
-
 # Define values of k
 k_values = [1, 2, 3, 4, 5]
 
 # Plot decision boundaries and accuracies for each value of k
 plt.figure(figsize=(15, 10))
 for i, k in enumerate(k_values, 1):
-    # Compute accuracy
-    accuracy = k_nearest_neighbors(X_train, y_train, X_test, k)
-
     # Train the model
-    predictions = []
-    for x in np.linspace(min(X_2d[:, 0]), max(X_2d[:, 0]), 100):
-        for y in np.linspace(min(X_2d[:, 1]), max(X_2d[:, 1]), 100):
-            pred = predict(X_train, y_train, np.array([x, y]), k)
-            predictions.append((pred, x, y))
-    predictions = np.array(predictions)
+    knn = KNeighborsClassifier(n_neighbors=k)
+    knn.fit(X_train, y_train)
+
+    # Compute accuracy
+    accuracy = knn.score(X_test, y_test) * 100
+
+    # Create a meshgrid to plot decision boundaries
+    x_min, x_max = X_2d[:, 0].min() - 1, X_2d[:, 0].max() + 1
+    y_min, y_max = X_2d[:, 1].min() - 1, X_2d[:, 1].max() + 1
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.1),
+                         np.arange(y_min, y_max, 0.1))
+    Z = knn.predict(np.c_[xx.ravel(), yy.ravel()])
+    Z = Z.reshape(xx.shape)
 
     # Plot decision boundaries
     plt.subplot(2, 3, i)
-    plt.title(f'k = {k}, Accuracy: {accuracy:.2f}%')
+    plt.contourf(xx, yy, Z, alpha=0.8, cmap='viridis')
     plt.scatter(X_2d[:, 0], X_2d[:, 1], c=y_34, cmap='viridis')
-    plt.scatter(predictions[:, 1], predictions[:, 2], c=predictions[:, 0], cmap='coolwarm', alpha=0.1)
+    plt.title(f'k = {k}, Accuracy: {accuracy:.2f}%')
     plt.xlabel('Principal Component 1')
     plt.ylabel('Principal Component 2')
 
