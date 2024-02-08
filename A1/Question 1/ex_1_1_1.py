@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
-from sklearn.metrics import accuracy_score
 from torchvision import datasets, transforms
 
 # Load MNIST training dataset
@@ -14,64 +13,64 @@ y_train = np.array([y for _, y in mnist_train])
 # Flatten and normalize the data
 X_train_flat = X_train.reshape((X_train.shape[0], -1)) / 255.0
 
-# Perform PCA to reduce dimensionality to 2
-pca = PCA(n_components=2)
+# Perform PCA to reduce dimensionality
+pca = PCA(n_components=50)  # Experiment with different numbers of components
 X_train_pca = pca.fit_transform(X_train_flat)
 
 # Separate data for classes 3 and 4
 X_class3 = X_train_pca[y_train == 3]
 X_class4 = X_train_pca[y_train == 4]
 
-# Calculate mean and covariance matrices
-mean_class3 = np.mean(X_class3, axis=0)
-covariance_class3 = np.cov(X_class3, rowvar=False)
-covariance_class3_inv = np.linalg.inv(covariance_class3)
+# Implement MED classifier
+med_threshold = np.mean(X_train_pca, axis=0)
 
-mean_class4 = np.mean(X_class4, axis=0)
-covariance_class4 = np.cov(X_class4, rowvar=False)
-covariance_class4_inv = np.linalg.inv(covariance_class4)
+# Implement MMD classifier
+mmd_threshold = np.mean(X_class3, axis=0) + np.mean(X_class4, axis=0)
 
-# MED classifier
-def med_classifier(sample, mean1, mean2):
-    d1 = np.linalg.norm(sample - mean1)
-    d2 = np.linalg.norm(sample - mean2)
-    if d1 < d2:
-        return 3  # Class 3
-    else:
-        return 4  # Class 4
+# Load MNIST test dataset
+mnist_test = datasets.MNIST(root='./data', train=False, download=True, transform=transforms.ToTensor())
 
-# Predict labels for training samples using MED classifier
-med_predictions_train = [med_classifier(sample, mean_class3, mean_class4) for sample in X_train_pca]
+# Extract features (flattened images) and labels for test set
+X_test = np.array([np.array(x).flatten() for x, _ in mnist_test])
+y_test = np.array([y for _, y in mnist_test])
 
-# MMD classifier
-def mahalanobis_distance(sample, mean, cov_inv):
-    delta = sample - mean
-    return np.sqrt(np.dot(np.dot(delta, cov_inv), delta))
+# Flatten and normalize the test data
+X_test_flat = X_test.reshape((X_test.shape[0], -1)) / 255.0
 
-# Predict labels for training samples using MMD classifier
-mmd_predictions_train = []
+# Perform PCA on test data
+X_test_pca = pca.transform(X_test_flat)
 
-for sample in X_train_pca:
-    md_class3 = mahalanobis_distance(sample, mean_class3, covariance_class3_inv)
-    md_class4 = mahalanobis_distance(sample, mean_class4, covariance_class4_inv)
-    
-    if md_class3 < md_class4:
-        mmd_predictions_train.append(3)  # Class 3
-    else:
-        mmd_predictions_train.append(4)  # Class 4
+# Calculate MED predictions on the test set
+med_predictions_test = np.argmin(np.linalg.norm(X_test_pca - med_threshold, axis=1, keepdims=True), axis=1)
 
-# Calculate accuracy on the training set
-med_accuracy_train = accuracy_score(y_train, med_predictions_train) * 100
-mmd_accuracy_train = accuracy_score(y_train, mmd_predictions_train) * 100
+# Calculate MMD predictions on the test set
+mmd_predictions_test = np.argmin(np.linalg.norm(X_test_pca - mmd_threshold, axis=1, keepdims=True), axis=1)
 
-print(f'MED Classifier Accuracy on Training Set: {med_accuracy_train:.2f}%')
-print(f'MMD Classifier Accuracy on Training Set: {mmd_accuracy_train:.2f}%')
+# Calculate accuracy on the test set for MED classifier
+med_correct = np.sum(med_predictions_test == y_test)
+med_accuracy = med_correct / len(y_test) * 100
+print(f'MED Classifier Accuracy on Test Set: {med_accuracy:.2f}%')
+
+# Calculate accuracy on the test set for MMD classifier
+mmd_correct = np.sum(mmd_predictions_test == y_test)
+mmd_accuracy = mmd_correct / len(y_test) * 100
+print(f'MMD Classifier Accuracy on Test Set: {mmd_accuracy:.2f}%')
 
 # Plotting decision boundaries on the training set
-plt.scatter(X_class3[:, 0], X_class3[:, 1], label='Class 3', c='blue')
-plt.scatter(X_class4[:, 0], X_class4[:, 1], label='Class 4', c='red')
-plt.scatter(mean_class3[0], mean_class3[1], marker='x', s=200, c='green', label='Class 3 Mean')
-plt.scatter(mean_class4[0], mean_class4[1], marker='o', s=200, c='purple', label='Class 4 Mean')
+plt.scatter(X_class3[:, 0], X_class3[:, 1], label='Class 3', c='blue', alpha=0.5)
+plt.scatter(X_class4[:, 0], X_class4[:, 1], label='Class 4', c='red', alpha=0.5)
+plt.scatter(med_threshold[0], med_threshold[1], marker='x', s=200, c='green', label='MED Threshold', alpha=1.0)
+plt.scatter(mmd_threshold[0], mmd_threshold[1], marker='o', s=200, c='purple', label='MMD Threshold', alpha=1.0)
+
+# Decision boundary for MED classifier
+x_med = np.linspace(np.min(X_train_pca[:, 0]), np.max(X_train_pca[:, 0]), 100)
+y_med = (med_threshold[1] / med_threshold[0]) * x_med
+plt.plot(x_med, y_med, label='MED Decision Boundary', linestyle='--', color='green')
+
+# Decision boundary for MMD classifier
+x_mmd = np.linspace(np.min(X_train_pca[:, 0]), np.max(X_train_pca[:, 0]), 100)
+y_mmd = (mmd_threshold[1] / mmd_threshold[0]) * x_mmd
+plt.plot(x_mmd, y_mmd, label='MMD Decision Boundary', linestyle='--', color='purple')
 
 plt.legend()
 plt.title('Decision Boundaries for MED and MMD Classifiers - Training Set')
