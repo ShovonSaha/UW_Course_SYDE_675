@@ -1,74 +1,71 @@
 import numpy as np
-import matplotlib.pyplot as plt
+from mnist import MNIST
 from sklearn.decomposition import PCA
-from torchvision import datasets, transforms
 
-# Load MNIST training dataset
-mnist_train = datasets.MNIST(root='./data', train=True, download=True, transform=transforms.ToTensor())
+# Load the MNIST test dataset
+mndata = MNIST('mnist_data')
+numbers, classes = mndata.load_testing()
 
-# Extract features (flattened images) and labels
-X_train = np.array([np.array(x).flatten() for x, _ in mnist_train])
-y_train = np.array([y for _, y in mnist_train])
+# Filter out only classes 3 and 4
+class3_images = []
+class4_images = []
 
-# Flatten and normalize the data
-X_train_flat = X_train.reshape((X_train.shape[0], -1)) / 255.0
+for i, label in enumerate(classes):
+    if label == 3:
+        class3_images.append(numbers[i])
+    elif label == 4:
+        class4_images.append(numbers[i])
 
-# Perform PCA to reduce dimensionality to 2
-pca = PCA(n_components=2)
-X_train_pca = pca.fit_transform(X_train_flat)
+# Convert lists to numpy arrays
+class3_images = np.array(class3_images)
+class4_images = np.array(class4_images)
 
-# Separate data for classes 3 and 4
-X_class3 = X_train_pca[y_train == 3]
-X_class4 = X_train_pca[y_train == 4]
+# Flatten the images
+class3_flat = class3_images.reshape((len(class3_images), -1))
+class4_flat = class4_images.reshape((len(class4_images), -1))
 
-# Implement MED classifier
-med_threshold = np.mean(X_train_pca, axis=0)
-
-# Implement MMD classifier
-mmd_threshold = np.mean(X_class3, axis=0) + np.mean(X_class4, axis=0)
-
-# Plotting decision boundaries on the training set
-plt.scatter(X_class3[:, 0], X_class3[:, 1], label='Class 3', c='blue', alpha=0.5)
-plt.scatter(X_class4[:, 0], X_class4[:, 1], label='Class 4', c='red', alpha=0.5)
-plt.scatter(med_threshold[0], med_threshold[1], marker='x', s=200, c='green', label='MED Threshold', alpha=1.0)
-plt.scatter(mmd_threshold[0], mmd_threshold[1], marker='o', s=200, c='purple', label='MMD Threshold', alpha=1.0)
-
-# Decision boundary for MED classifier
-x_med = np.linspace(np.min(X_train_pca[:, 0]), np.max(X_train_pca[:, 0]), 100)
-y_med = (med_threshold[1] / med_threshold[0]) * x_med
-plt.plot(x_med, y_med, label='MED Decision Boundary', linestyle='--', color='green')
-
-# Decision boundary for MMD classifier
-x_mmd = np.linspace(np.min(X_train_pca[:, 0]), np.max(X_train_pca[:, 0]), 100)
-y_mmd = (mmd_threshold[1] / mmd_threshold[0]) * x_mmd
-plt.plot(x_mmd, y_mmd, label='MMD Decision Boundary', linestyle='--', color='purple')
-
-plt.legend()
-plt.title('Decision Boundaries for MED and MMD Classifiers - Training Set')
-plt.show()
-
-# Load MNIST test dataset
-mnist_test = datasets.MNIST(root='./data', train=False, download=True, transform=transforms.ToTensor())
-
-# Extract features (flattened images) and labels for test set
-X_test = np.array([np.array(x).flatten() for x, _ in mnist_test])
-y_test = np.array([y for _, y in mnist_test])
-
-# Flatten and normalize the test data
-X_test_flat = X_test.reshape((X_test.shape[0], -1)) / 255.0
+# Combine the flattened images
+X_test = np.vstack((class3_flat, class4_flat))
+y_test = np.hstack((np.zeros(len(class3_flat)), np.ones(len(class4_flat))))
 
 # Perform PCA on test data
-X_test_pca = pca.transform(X_test_flat)
+X_test_pca = pca.transform(X_test)
 
-# Calculate MED predictions on the test set
-med_predictions_test = np.argmin(np.linalg.norm(X_test_pca - med_threshold, axis=1, keepdims=True), axis=1)
+# Define MED and MMD classifiers
+def med_classifier(sample, mean1, mean2):
+    d1 = np.linalg.norm(sample - mean1)
+    d2 = np.linalg.norm(sample - mean2)
+    if d1 < d2:
+        return 0
+    else:
+        return 1
 
-# Calculate MMD predictions on the test set
-mmd_predictions_test = np.argmin(np.linalg.norm(X_test_pca - mmd_threshold, axis=1, keepdims=True), axis=1)
+def mmd_classifier(sample, mean1, cov_inv1, mean2, cov_inv2):
+    md_class1 = np.sqrt(np.dot(np.dot((sample - mean1).T, cov_inv1), sample - mean1))
+    md_class2 = np.sqrt(np.dot(np.dot((sample - mean2).T, cov_inv2), sample - mean2))
+    if md_class1 < md_class2:
+        return 0
+    else:
+        return 1
 
-# Calculate accuracy on the test set
-med_accuracy_test = (np.sum(med_predictions_test == y_test) / len(y_test)) * 100
-mmd_accuracy_test = (np.sum(mmd_predictions_test == y_test) / len(y_test)) * 100
+# Calculate mean and covariance matrices for training set
+mean_class3_train = np.mean(X_class3, axis=0)
+mean_class4_train = np.mean(X_class4, axis=0)
+cov_class3_train = np.cov(X_class3.T)
+cov_class4_train = np.cov(X_class4.T)
+cov_inv_class3_train = np.linalg.inv(cov_class3_train)
+cov_inv_class4_train = np.linalg.inv(cov_class4_train)
 
-print(f'MED Classifier Accuracy on Test Set: {med_accuracy_test:.2f}%')
-print(f'MMD Classifier Accuracy on Test Set: {mmd_accuracy_test:.2f}%')
+# Predict labels for test set using MED classifier
+med_predictions_test = [med_classifier(sample, mean_class3_train, mean_class4_train) for sample in X_test_pca]
+
+# Predict labels for test set using MMD classifier
+mmd_predictions_test = [mmd_classifier(sample, mean_class3_train, cov_inv_class3_train, mean_class4_train, cov_inv_class4_train) for sample in X_test_pca]
+
+# Calculate classification accuracy for MED classifier
+med_accuracy = np.mean(med_predictions_test == y_test) * 100
+print(f"MED Classifier Accuracy on Test Set: {med_accuracy:.2f}%")
+
+# Calculate classification accuracy for MMD classifier
+mmd_accuracy = np.mean(mmd_predictions_test == y_test) * 100
+print(f"MMD Classifier Accuracy on Test Set: {mmd_accuracy:.2f}%")
