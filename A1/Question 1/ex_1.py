@@ -1,57 +1,32 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
-from mnist import MNIST
+from torchvision import datasets, transforms
 
-# Load the MNIST dataset
-mndata = MNIST('mnist_data')
-numbers, classes = mndata.load_training()
+# Load MNIST training dataset
+mnist_train = datasets.MNIST(root='./data', train=True, download=True, transform=transforms.ToTensor())
 
-# Filter out only classes 3 and 4
-class3_images = []
-class4_images = []
+# Convert MNIST training dataset to numpy arrays
+X_train = mnist_train.data.numpy()
+y_train = mnist_train.targets.numpy()
 
-for i, label in enumerate(classes):
-    if label == 3:
-        class3_images.append(numbers[i])
-    elif label == 4:
-        class4_images.append(numbers[i])
+# Reshape the data to flatten the images
+X_train = X_train.reshape(X_train.shape[0], -1)
 
-# Convert lists to numpy arrays
-class3_images = np.array(class3_images)
-class4_images = np.array(class4_images)
+# Filter dataset to contain only classes 3 and 4
+X_34 = X_train[(y_train == 3) | (y_train == 4)]
+y_34 = y_train[(y_train == 3) | (y_train == 4)]
 
-# Flatten the images
-class3_flat = class3_images.reshape((len(class3_images), -1))
-class4_flat = class4_images.reshape((len(class4_images), -1))
+# Normalize data
+X_34 = X_34 / 255.0
 
-# Combine the flattened images
-X = np.vstack((class3_flat, class4_flat))
-y = np.hstack((np.zeros(len(class3_flat)), np.ones(len(class4_flat))))
-
-# Perform PCA to reduce dimensionality to 2
+# Apply PCA to reduce dimensions to 2
 pca = PCA(n_components=2)
-X_pca = pca.fit_transform(X)
+X_2d = pca.fit_transform(X_34)
 
 # Separate data for classes 3 and 4 after PCA
-X_class3 = X_pca[y == 0]
-X_class4 = X_pca[y == 1]
-
-def med_classifier(sample, mean1, mean2):
-    d1 = np.linalg.norm(sample - mean1)
-    d2 = np.linalg.norm(sample - mean2)
-    if d1 < d2:
-        return 0
-    else:
-        return 1
-
-def mmd_classifier(sample, mean1, cov_inv1, mean2, cov_inv2):
-    md_class1 = np.sqrt(np.dot(np.dot((sample - mean1).T, cov_inv1), sample - mean1))
-    md_class2 = np.sqrt(np.dot(np.dot((sample - mean2).T, cov_inv2), sample - mean2))
-    if md_class1 < md_class2:
-        return 0
-    else:
-        return 1
+X_class3 = X_2d[y_34 == 3]
+X_class4 = X_2d[y_34 == 4]
 
 # Calculate the mean of each class
 mean_class3 = np.mean(X_class3, axis=0)
@@ -61,9 +36,13 @@ mean_class4 = np.mean(X_class4, axis=0)
 cov_class3 = np.cov(X_class3.T)
 cov_class4 = np.cov(X_class4.T)
 
-# Calculate the inverse covariance matrices
-cov_inv_class3 = np.linalg.inv(cov_class3)
-cov_inv_class4 = np.linalg.inv(cov_class4)
+# Perform eigenvalue decomposition on covariance matrices
+eigvals3, eigvecs3 = np.linalg.eigh(cov_class3)
+eigvals4, eigvecs4 = np.linalg.eigh(cov_class4)
+
+# Invert the eigenvalues to get the inverse covariance matrices
+cov_inv_class3 = np.dot(eigvecs3, np.dot(np.diag(1.0 / eigvals3), eigvecs3.T))
+cov_inv_class4 = np.dot(eigvecs4, np.dot(np.diag(1.0 / eigvals4), eigvecs4.T))
 
 # Calculate the slope of the MED decision boundary
 slope_med = -(mean_class4[0] - mean_class3[0]) / (mean_class4[1] - mean_class3[1])
@@ -88,12 +67,12 @@ plt.scatter(mean_class3[0], mean_class3[1], marker='x', s=200, c='green', label=
 plt.scatter(mean_class4[0], mean_class4[1], marker='o', s=200, c='purple', label='Class 4 Mean')
 
 # Plot the MED decision boundary
-x_med = np.linspace(np.min(X_pca[:, 0]), np.max(X_pca[:, 0]), 100)
+x_med = np.linspace(np.min(X_2d[:, 0]), np.max(X_2d[:, 0]), 100)
 y_med = slope_med * (x_med - midpoint_med[0]) + midpoint_med[1]
 plt.plot(x_med, y_med, label='MED Decision Boundary', linestyle='--', color='black')
 
 # Plot the MMD decision boundary
-x_mmd = np.linspace(np.min(X_pca[:, 0]), np.max(X_pca[:, 0]), 100)
+x_mmd = np.linspace(np.min(X_2d[:, 0]), np.max(X_2d[:, 0]), 100)
 y_mmd = slope_mmd * x_mmd + intercept_mmd
 plt.plot(x_mmd, y_mmd, label='MMD Decision Boundary', linestyle='--', color='green')
 
