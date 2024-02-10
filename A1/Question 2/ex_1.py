@@ -65,7 +65,6 @@
 
 
 
-
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
@@ -97,27 +96,27 @@ split = int(0.8 * len(X_2d))
 X_train, X_test = X_2d[:split], X_2d[split:]
 y_train, y_test = y_34[:split], y_34[split:]
 
-def euclidean_distance(x1, x2):
-    return np.sqrt(np.sum((x1 - x2) ** 2))
-
-def predict(X_train, y_train, x_test, k):
-    distances = []
-    for i in range(len(X_train)):
-        dist = euclidean_distance(x_test, X_train[i])
-        distances.append((dist, y_train[i]))
-    distances = sorted(distances)[:k]
-    labels = [dist[1] for dist in distances]
-    prediction = max(set(labels), key=labels.count)
-    return prediction
+def predict(X_train, y_train, X_test, k):
+    # Compute distances between test samples and training samples using broadcasting
+    distances = np.sqrt(np.sum((X_train[:, np.newaxis, :] - X_test[np.newaxis, :, :])**2, axis=2))
+    
+    # Get indices of k nearest neighbors for each test sample
+    nearest_indices = np.argsort(distances, axis=0)[:k]
+    
+    # Get labels of k nearest neighbors for each test sample
+    nearest_labels = y_train[nearest_indices]
+    
+    # Predict labels based on majority vote
+    predictions = np.argmax(np.apply_along_axis(np.bincount, axis=0, arr=nearest_labels, minlength=10), axis=0)
+    
+    return predictions
 
 def k_nearest_neighbors(X_train, y_train, X_test, y_test, k):
-    correct = 0
-    total = len(X_test)
-    for i in range(total):
-        prediction = predict(X_train, y_train, X_test[i], k)
-        if prediction == y_test[i]:
-            correct += 1
-    accuracy = (correct / total) * 100
+    # Make predictions
+    predictions = predict(X_train, y_train, X_test, k)
+    
+    # Compute accuracy
+    accuracy = np.mean(predictions == y_test) * 100
     return accuracy
 
 # Define values of k
@@ -134,7 +133,7 @@ for i, k in enumerate(k_values, 1):
     y_min, y_max = X_2d[:, 1].min() - 1, X_2d[:, 1].max() + 1
     xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.1),
                          np.arange(y_min, y_max, 0.1))
-    Z = np.array([predict(X_train, y_train, [xi, yi], k) for xi, yi in zip(xx.ravel(), yy.ravel())])
+    Z = predict(X_train, y_train, np.c_[xx.ravel(), yy.ravel()], k)
     Z = Z.reshape(xx.shape)
 
     # Plot decision boundaries
