@@ -1,63 +1,54 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
-from sklearn.neighbors import KNeighborsClassifier
 from torchvision import datasets, transforms
+from sklearn.decomposition import PCA
 
-# Load MNIST training dataset
+# Function to calculate Euclidean distance between two points
+def custom_distance(x1, x2):
+    return np.linalg.norm(x1 - x2)
+
+# Function to predict label using k-nearest neighbors
+def knn_predict(X_train, y_train, x_test, k):
+    distances = np.linalg.norm(X_train - x_test, axis=1)  # Calculate distances to all training points
+    nearest_indices = np.argsort(distances)[:k]  # Get indices of k nearest neighbors
+    nearest_labels = y_train[nearest_indices]  # Get labels of k nearest neighbors
+    unique_labels, counts = np.unique(nearest_labels, return_counts=True)  # Count occurrences of each label
+    prediction = unique_labels[np.argmax(counts)]  # Predict the label with maximum occurrences
+    return prediction
+
+# Load MNIST training and test datasets
 mnist_train = datasets.MNIST(root='./data', train=True, download=True, transform=transforms.ToTensor())
+mnist_test = datasets.MNIST(root='./data', train=False, download=True, transform=transforms.ToTensor())
 
 # Convert MNIST training dataset to numpy arrays
 X_train = mnist_train.data.numpy()
 y_train = mnist_train.targets.numpy()
 
-# Reshape the data to flatten the images
-X_train = X_train.reshape(X_train.shape[0], -1)
+# Convert MNIST test dataset to numpy arrays
+X_test = mnist_test.data.numpy()
+y_test = mnist_test.targets.numpy()
 
-# Filter dataset to contain only classes 3 and 4
-X_34 = X_train[(y_train == 3) | (y_train == 4)]
-y_34 = y_train[(y_train == 3) | (y_train == 4)]
+# Reshape the data to flatten the images to 784x1 vectors
+X_train_flat = X_train.reshape(X_train.shape[0], -1)
+X_test_flat = X_test.reshape(X_test.shape[0], -1)
 
-# Normalize data
-X_34 = X_34 / 255.0
-
-# Apply PCA to reduce dimensions to 2
+# Use PCA to reduce dimensionality to 2x1 vectors
 pca = PCA(n_components=2)
-X_2d = pca.fit_transform(X_34)
+X_train_pca = pca.fit_transform(X_train_flat)
+X_test_pca = pca.transform(X_test_flat)
 
-# Split data into train and test sets
-split = int(0.8 * len(X_2d))
-X_train, X_test = X_2d[:split], X_2d[split:]
-y_train, y_test = y_34[:split], y_34[split:]
+# Filter training and test datasets to contain only classes 3 and 4
+X_train_34 = X_train_pca[(y_train == 3) | (y_train == 4)]
+y_train_34 = y_train[(y_train == 3) | (y_train == 4)]
+X_test_34 = X_test_pca[(y_test == 3) | (y_test == 4)]
+y_test_34 = y_test[(y_test == 3) | (y_test == 4)]
 
-# Define values of k
-k_values = [1, 2, 3, 4, 5]
-
-# Plot decision boundaries and accuracies for each value of k
-plt.figure(figsize=(15, 10))
-for i, k in enumerate(k_values, 1):
-    # Train the model
-    knn = KNeighborsClassifier(n_neighbors=k)
-    knn.fit(X_train, y_train)
-
-    # Compute accuracy
-    accuracy = knn.score(X_test, y_test) * 100
-
-    # Create a meshgrid to plot decision boundaries
-    x_min, x_max = X_2d[:, 0].min() - 1, X_2d[:, 0].max() + 1
-    y_min, y_max = X_2d[:, 1].min() - 1, X_2d[:, 1].max() + 1
-    xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.1),
-                         np.arange(y_min, y_max, 0.1))
-    Z = knn.predict(np.c_[xx.ravel(), yy.ravel()])
-    Z = Z.reshape(xx.shape)
-
-    # Plot decision boundaries
-    plt.subplot(2, 3, i)
-    plt.contourf(xx, yy, Z, alpha=0.8, cmap='viridis')
-    plt.scatter(X_2d[:, 0], X_2d[:, 1], c=y_34, cmap='viridis')
-    plt.title(f'k = {k}, Accuracy: {accuracy:.2f}%')
-    plt.xlabel('Principal Component 1')
-    plt.ylabel('Principal Component 2')
-
-plt.tight_layout()
-plt.show()
+# Evaluate k-nearest neighbor classifier for k = 1 to 5
+for k in range(1, 6):
+    correct_predictions = 0
+    total_samples = len(X_test_34)
+    for i, x_test in enumerate(X_test_34):
+        prediction = knn_predict(X_train_34, y_train_34, x_test, k)
+        if prediction == y_test_34[i]:
+            correct_predictions += 1
+    accuracy = (correct_predictions / total_samples) * 100
+    print("k = {}, Accuracy: {:.2f}%".format(k, accuracy))
