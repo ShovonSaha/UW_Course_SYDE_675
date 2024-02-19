@@ -1,0 +1,227 @@
+\documentclass[10pt,letter,notitlepage]{article}
+%Mise en page
+\usepackage[left=2cm, right=2cm, lines=45, top=0.8in, bottom=0.7in]{geometry}
+\usepackage{fancyhdr}
+\usepackage{fancybox}
+\usepackage{pdfpages} 
+\renewcommand{\headrulewidth}{1.5pt}
+\renewcommand{\footrulewidth}{1.5pt}
+\pagestyle{fancy}
+\newcommand\Loadedframemethod{TikZ}
+\usepackage[framemethod=\Loadedframemethod]{mdframed}
+\usepackage{tikz}
+\usepackage[linesnumbered,ruled,vlined]{algorithm2e}
+%\usepackage{url}
+\usepackage{dsfont}
+\usepackage{amssymb,amsmath}
+\usepackage{xspace}
+
+
+\usepackage{xcolor}
+
+\lhead{
+\textbf{University of Waterloo}
+}
+\rhead{\textbf{Winter 2024}
+}
+\chead{\textbf{
+SYDE675
+ }}
+
+\newcommand{\RR}{\mathds{R}}
+\newcommand{\sign}{\mathop{\mathrm{sign}}}
+\newcommand{\argmin}{\mathop{\mathrm{argmin}}}
+\newcommand{\zero}{\mathbf{0}}
+\newcommand{\one}{\mathbf{1}}
+\newcommand{\bv}{\mathbf{b}}
+\newcommand{\wv}{\mathbf{w}}
+\newcommand{\xv}{\mathbf{x}}
+\newcommand{\yv}{\mathbf{y}}
+\newcommand{\rv}{\mathbf{r}}
+\newcommand{\inner}[2]{\langle #1, #2 \rangle}
+\newcommand{\red}[1]{{\color{red}#1}}
+\newcommand{\blue}[1]{{\color{blue}#1}}
+\newcommand{\magenta}[1]{{\color{magenta}#1}}
+
+
+\newcommand{\ea}{{et al.}\xspace}
+\newcommand{\eg}{{e.g.}\xspace}
+\newcommand{\ie}{{i.e.}\xspace}
+\newcommand{\iid}{{i.i.d.}\xspace}
+\newcommand{\cf}{{cf.}\xspace}
+\newcommand{\wrt}{{w.r.t.}\xspace}
+\newcommand{\aka}{{a.k.a.}\xspace}
+\newcommand{\etc}{{etc.}\xspace}
+
+\newcommand{\ans}[1]{{\color{orange}\textsf{Ans}: #1}}
+
+
+\lfoot{}
+\cfoot{\textbf{Ali Ayub (a9ayub@uwaterloo.ca) \textcopyright 2024}}
+
+%================================
+%================================
+
+\setlength{\parskip}{1cm}
+\setlength{\parindent}{1cm}
+\tikzstyle{titregris} =
+[draw=gray,fill=white, shading = exersicetitle, %
+text=gray, rectangle, rounded corners, right,minimum height=.3cm]
+\pgfdeclarehorizontalshading{exersicebackground}{100bp}
+{color(0bp)=(green!40); color(100bp)=(black!5)}
+\pgfdeclarehorizontalshading{exersicetitle}{100bp}
+{color(0bp)=(red!40);color(100bp)=(black!5)}
+\newcounter{exercise}
+\renewcommand*\theexercise{exercice \textbf{Exercice}~n\arabic{exercise}}
+\makeatletter
+\def\mdf@@exercisepoints{}%new mdframed key:
+\define@key{mdf}{exercisepoints}{%
+\def\mdf@@exercisepoints{#1}
+}
+
+\mdfdefinestyle{exercisestyle}{%
+outerlinewidth=1em,outerlinecolor=white,%
+leftmargin=-1em,rightmargin=-1em,%
+middlelinewidth=0.5pt,roundcorner=3pt,linecolor=black,
+apptotikzsetting={\tikzset{mdfbackground/.append style ={%
+shading = exersicebackground}}},
+innertopmargin=0.1\baselineskip,
+skipabove={\dimexpr0.1\baselineskip+0\topskip\relax},
+skipbelow={-0.1em},
+needspace=0.5\baselineskip,
+frametitlefont=\sffamily\bfseries,
+settings={\global\stepcounter{exercise}},
+singleextra={%
+\node[titregris,xshift=0.5cm] at (P-|O) %
+{~\mdf@frametitlefont{\theexercise}~};
+\ifdefempty{\mdf@@exercisepoints}%
+{}%
+{\node[titregris,left,xshift=-1cm] at (P)%
+{~\mdf@frametitlefont{\mdf@@exercisepoints points}~};}%
+},
+firstextra={%
+\node[titregris,xshift=1cm] at (P-|O) %
+{~\mdf@frametitlefont{\theexercise}~};
+\ifdefempty{\mdf@@exercisepoints}%
+{}%
+{\node[titregris,left,xshift=-1cm] at (P)%
+{~\mdf@frametitlefont{\mdf@@exercisepoints points}~};}%
+},
+}
+\makeatother
+
+
+%%%%%%%%%
+
+%%%%%%%%%%%%%%%
+\mdfdefinestyle{theoremstyle}{%
+outerlinewidth=0.01em,linecolor=black,middlelinewidth=0.5pt,%
+frametitlerule=true,roundcorner=2pt,%
+apptotikzsetting={\tikzset{mfframetitlebackground/.append style={%
+shade,left color=white, right color=blue!20}}},
+frametitlerulecolor=black,innertopmargin=1\baselineskip,%green!60,
+innerbottommargin=0.5\baselineskip,
+frametitlerulewidth=0.1pt,
+innertopmargin=0.7\topskip,skipabove={\dimexpr0.2\baselineskip+0.1\topskip\relax},
+frametitleaboveskip=1pt,
+frametitlebelowskip=1pt
+}
+\setlength{\parskip}{0mm}
+\setlength{\parindent}{10mm}
+\mdtheorem[style=theoremstyle]{exercise}{\textbf{Exercise}}
+
+%================Liste definition--numList-and alphList=============
+\newcounter{alphListCounter}
+\newenvironment
+{alphList}
+{\begin{list}
+{\alph{alphListCounter})}
+{\usecounter{alphListCounter}
+\setlength{\rightmargin}{0cm}
+\setlength{\leftmargin}{0.5cm}
+\setlength{\itemsep}{0.2cm}
+\setlength{\partopsep}{0cm}
+\setlength{\parsep}{0cm}}
+}
+{\end{list}}
+\newcounter{numListCounter}
+\newenvironment
+{numList}
+{\begin{list}
+{\arabic{numListCounter})}
+{\usecounter{numListCounter}
+\setlength{\rightmargin}{0cm}
+\setlength{\leftmargin}{0.5cm}
+\setlength{\itemsep}{0cm}
+\setlength{\partopsep}{0cm}
+\setlength{\parsep}{0cm}}
+}
+{\end{list}}
+
+\usepackage[breaklinks=true,letterpaper=true,linkcolor=magenta,urlcolor=magenta,citecolor=black]{hyperref}
+
+\usepackage{cleveref}
+
+
+%===========================================================
+\begin{document}
+
+\begin{center}
+  \large{\textbf{SYDE: Introduction to Pattern Recognition} \\ Assignment 1\\ \red{Due: 11:59 PM (EST), Feb 6, 2024}, submit on LEARN.} \\
+
+Include your name and student number!
+
+\end{center}
+
+\begin{center}
+Submit your write-up in pdf and all source code in a zip file (with proper documentation). Write a script for each programming exercise so that the TAs can easily run and verify your results. Make sure your code runs!
+
+[Text in square brackets are hints that can be ignored.]
+\end{center}
+
+\noindent \red{NOTE} For all the exercises, you are only allowed to use the basic Python, Numpy, and matplotlib (for plotting) libraries, unless specified otherwise.
+
+\begin{exercise}[MED and MMD Classifiers (35 pts)]
+In this exercise, you will be using the \href{https://pytorch.org/vision/stable/datasets.html#mnist}{\magenta{MNIST}} dataset for image classification. This is a common dataset in machine learning and pattern recognition and it is freely available from multiple sources online. To work with this dataset, you will first need to flatten your images from 28$\times$28 to 784$\times$1 vectors. Next, use the \href{https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.PCA.html}{\magenta{PCA}} in scikit learn to convert the 784$\times$1 vectors to 2$\times$1 vectors. \blue{Note} that the dataset consists of the training and the test sets. Use the training set for implementing the classifiers in the exercise. \blue{Also}, use only two classes in the dataset i.e. the two classes representing numbers 3 and 4.
+
+\begin{enumerate}
+    \item (15 pts) Implement the algorithm for the MED and MMD classifiers on the training set of the MNIST dataset. Determine the decision boundary for the two classifiers. Plot the boundary along with the training data. 
+    \item (2 pts) Use the test set of the two classes in the MNIST dataset and make label predictions for all the test vectors for the two classes using the MED and MMD classifiers. Report the classification accuracy of the classifiers using: 
+    \begin{equation}
+        error = \frac{Number\ of\ correct\ predictions}{total\ number\ of\ data\ points\ in\ the\ test\ set}    
+    \end{equation}
+    \item (3 pts) Which of the two classifiers is better? Explain.
+    \item (15 pts) Now, for the same two classes in the MNIST dataset, use PCA to convert the images to 20$\times$1 vectors. Repeat steps 1-3 for this dataset. For step 1, can you plot the decision boundary for this dataset? Explain.
+    
+\end{enumerate}
+\end{exercise}
+
+
+\begin{exercise}[Nearest Neighbor Classification and Regression (45 pts)] 
+
+\begin{enumerate}
+    \item (15 pts) Implement the $k$-nearest neighbour classifier on the MNIST dataset with 2$\times$1 vectors for the same two classes used in the previous exercise. Use euclidean distance as the distance metric. Compute the $k$NN solution for each integer $k$ from 1 to 5. 
+    \item (3 pts) Use the test set of the two classes and find the classification accuracy for all $k$NN classifiers. Plot the accuracy for each value of $k$. 
+    \item (2 pts) Which $k$ value seems to be producing the best results? Why?
+    \item (5 pts) How does the $k$NN classifier compare against the MED and MMD classifiers in the previous exercise?
+    \item (20 pts) Now let's do $k$NN regression, which is similar to classification, but instead of aggregating labels by taking the majority, we average the $y$ values of the $k$ nearest neighbours. For this, use the training set of the $d=20$ mystery dataset F available on the course website, and compute the $k$NN regression solution with each integer $k$ from 1 to 3. Report the mean squared error using the test set of the mystery dataset F for the three $k$NN classifiers. Which $k$ value seems to be giving you the best result? Explain.
+\end{enumerate}
+\end{exercise}
+
+\newpage
+\begin{exercise}[ML and MAP Classifiers (20 pts)]
+In this exercise, you will use the same data as in exercise 1 with 2$\times$1 vectors, for the ML and MAP classifiers.
+
+\begin{enumerate}
+\item (5 pts) Find the sample mean and covariance for the training set of the two classes in the MNIST dataset and estimate the probability of the two classes as Gaussian distributions. Based on this, develop an ML classifier and report the classification accuracy on the test set of the two classes.
+
+\item (5 pts) Now, let's assume that the prior probabilities for the two classes are $p(C_1)=0.58$ and $p(C_2) = 0.42$. Using these prior probabilities, and the means and covariances of the two classes, develop an MAP classifier and report the classification accuracy on the test set.
+
+\item (5 pts) Based on the results, do you think that assuming the probability distributions of the two classes as Gaussian was correct? Explain.
+
+\item (5 pts) Compare the ML, MAP, MED, MMD, and $k$NN classifiers based on the classification accuracy. Which classifier is the best? Could the inferior classifiers be better for different datasets? Explain.
+\end{enumerate}
+\end{exercise}
+
+\end{document}
+              
