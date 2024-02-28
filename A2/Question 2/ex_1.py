@@ -1,111 +1,79 @@
 import numpy as np
-import torch
-import torchvision
+import torchvision.datasets as datasets
+import torchvision.transforms as transforms
 from sklearn.metrics.pairwise import cosine_distances
-from sklearn.metrics import silhouette_score
 
-def compute_mahalanobis_distance(X, centroid, covariance_matrix, regularization=1e-5):
-    """
-    Compute Mahalanobis distance between data points and a centroid using regularization.
+def sample_per_class(X, y, n_samples):
+    sampled_indices = []
+    for label in np.unique(y):
+        indices = np.where(y == label)[0]
+        sampled_indices.extend(np.random.choice(indices, n_samples, replace=False))
+    return X[sampled_indices], y[sampled_indices]
 
-    Args:
-    - X (numpy.ndarray): Data points
-    - centroid (numpy.ndarray): Centroid position
-    - covariance_matrix (numpy.ndarray): Covariance matrix
-    - regularization (float): Regularization parameter (default: 1e-5)
+def normalize_features(X):
+    return X / 255.0
 
-    Returns:
-    - mahalanobis_distances (numpy.ndarray): Mahalanobis distances
-    """
-    # Regularize the covariance matrix
-    covariance_matrix_regularized = covariance_matrix + regularization * np.eye(covariance_matrix.shape[0])
-
-    try:
-        # Compute the inverse of the regularized covariance matrix
-        inverse_covariance_matrix = np.linalg.inv(covariance_matrix_regularized)
-    except np.linalg.LinAlgError:
-        # Handle singular matrix by adding a small regularization term
-        inverse_covariance_matrix = np.linalg.inv(covariance_matrix_regularized + regularization)
-
-    # Compute the difference between data points and centroid
-    centered_data = X - centroid
-
-    # Compute Mahalanobis distances
-    mahalanobis_distances = np.sqrt(np.sum(centered_data.dot(inverse_covariance_matrix) * centered_data, axis=1))
-
-    return mahalanobis_distances
-
-def kmeans_from_scratch(X, n_clusters, distance='cosine', max_iter=2):
-    """
-    Perform K-means clustering from scratch.
-    
-    Args:
-    - X (numpy.ndarray): Input data points
-    - n_clusters (int): Number of clusters
-    - distance (str): Distance metric to use: 'cosine' or 'mmd'
-    - max_iter (int): Maximum number of iterations
-    
-    Returns:
-    - labels (numpy.ndarray): Cluster labels for each data point
-    - centroids (numpy.ndarray): Final centroid positions
-    """
-    print(f"Running kmeans_from_scratch function with distance metric: {distance}")
-    
-    # Initialize centroids randomly
-    centroids_indices = np.random.choice(X.shape[0], n_clusters, replace=False)
-    centroids = X[centroids_indices]
-    
-    # Initialize labels array
-    labels = np.zeros(X.shape[0])
-    
-    # Iterate until convergence or max_iter
-    for iteration in range(max_iter):
-        print(f"Iteration {iteration + 1}/{max_iter}")
-        # Assign each data point to the nearest centroid
-        for i, x in enumerate(X):
-            if distance == 'cosine':
-                distances = cosine_distances([x], centroids)[0]
-            elif distance == 'mmd':
-                distances = compute_mahalanobis_distance(X, x, np.cov(X.T))
-            else:
-                raise ValueError("Invalid distance metric. Choose 'cosine' or 'mmd'.")
-                
-            labels[i] = np.argmin(distances)
-        
-        # Update centroids
-        new_centroids = np.array([X[labels == k].mean(axis=0) for k in range(n_clusters)])
-        
-        # Check for convergence
+def kmeans_cosine(X, k, max_iter=100):
+    centroids = X[np.random.choice(len(X), k, replace=False)]
+    for _ in range(max_iter):
+        distances = cosine_distances(X, centroids)
+        labels = np.argmin(distances, axis=1)
+        new_centroids = np.array([X[labels == i].mean(axis=0) for i in range(k)])
         if np.all(centroids == new_centroids):
-            print("Convergence reached.")
             break
-        
         centroids = new_centroids
-    
-    print("Finished executing kmeans_from_scratch function.")
-    
-    return labels, centroids
+    return labels
 
-# Load the MNIST dataset using torchvision
-print("Loading MNIST dataset...")
-mnist_train = torchvision.datasets.MNIST(root='./data', train=True, download=True, transform=torchvision.transforms.ToTensor())
-X = mnist_train.data.numpy()
-y = mnist_train.targets.numpy()
+def mahalanobis_distance(x, centroid, cov_inv):
+    diff = x - centroid
+    return np.sqrt(np.dot(np.dot(diff, cov_inv), diff.T))
 
-# Preprocess the data by flattening the images
-print("Preprocessing the data...")
-X_flattened = X.reshape(X.shape[0], -1)
+def kmeans_mahalanobis(X, k, max_iter=100):
+    centroids = X[np.random.choice(len(X), k, replace=False)]
+    for _ in range(max_iter):
+        cov_inv = np.linalg.pinv(np.cov(X.T))
+        distances = np.array([mahalanobis_distance(x, centroid, cov_inv) for x in X for centroid in centroids])
+        distances = distances.reshape((len(X), k))
+        labels = np.argmin(distances, axis=1)
+        new_centroids = np.array([X[labels == i].mean(axis=0) for i in range(k)])
+        if np.all(centroids == new_centroids):
+            break
+        centroids = new_centroids
+    return labels
 
-# Perform K-means clustering with cosine distance
-print("Running K-means clustering with cosine distance...")
-# labels_cosine, centroids_cosine = kmeans_from_scratch(X_flattened, n_clusters=5, distance='cosine', max_iter=2)
+# Fetch MNIST dataset using torchvision
+transform = transforms.Compose([transforms.ToTensor()])
+mnist_trainset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+X, y = mnist_trainset.data.numpy(), mnist_trainset.targets.numpy()
+X = X.reshape(X.shape[0], -1)
 
-# Perform K-means clustering with Mahalanobis (MMD) distance
-print("Running K-means clustering with Mahalanobis (MMD) distance...")
-labels_mmd, centroids_mmd = kmeans_from_scratch(X_flattened, n_clusters=5, distance='mmd', max_iter=2)
+# Sample approximately 500 images per class
+X_sampled, y_sampled = sample_per_class(X, y, n_samples=500)
 
-# Evaluate clustering performance using silhouette score
-# silhouette_avg_cosine = silhouette_score(X_flattened, labels_cosine)
-silhouette_avg_mmd = silhouette_score(X_flattened, labels_mmd)
-# print(f"Silhouette Score (Cosine Distance): {silhouette_avg_cosine}")
-print(f"Silhouette Score (Mahalanobis Distance): {silhouette_avg_mmd}")
+# Normalize features
+X_sampled = normalize_features(X_sampled)
+
+# Define value of k
+k_values = [10]
+
+best_accuracy_cosine = 0
+best_accuracy_mahalanobis = 0
+
+# Apply K-means clustering with cosine distance for each value of k
+for k in k_values:
+    labels_cosine = kmeans_cosine(X_sampled, k)
+    accuracy = np.mean(labels_cosine == y_sampled) * 100
+    if accuracy > best_accuracy_cosine:
+        best_accuracy_cosine = accuracy
+    print(f"K-means clustering with cosine distance for k={k}, accuracy={accuracy:.2f}%")
+
+# Apply K-means clustering with Mahalanobis distance for each value of k
+for k in k_values:
+    labels_mahalanobis = kmeans_mahalanobis(X_sampled, k)
+    accuracy = np.mean(labels_mahalanobis == y_sampled) * 100
+    if accuracy > best_accuracy_mahalanobis:
+        best_accuracy_mahalanobis = accuracy
+    print(f"K-means clustering with Mahalanobis distance for k={k}, accuracy={accuracy:.2f}%")
+
+print(f"Best accuracy for cosine distance: {best_accuracy_cosine:.2f}%")
+print(f"Best accuracy for Mahalanobis distance: {best_accuracy_mahalanobis:.2f}%")
