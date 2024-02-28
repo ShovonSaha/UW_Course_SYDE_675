@@ -1,93 +1,121 @@
 import numpy as np
 import torch
-import torchvision
-from sklearn.metrics.pairwise import cosine_distances
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import pairwise_distances
+import torchvision.datasets as datasets
+from torchvision.transforms import ToTensor
 
-def compute_euclidean_distance(x1, x2):
+def compute_accuracy(true_labels, cluster_labels):
     """
-    Compute the Euclidean distance between two vectors.
+    Compute accuracy by comparing true labels with cluster labels assigned by K-means.
 
     Args:
-    - x1 (numpy.ndarray): First vector
-    - x2 (numpy.ndarray): Second vector
+    - true_labels (numpy.ndarray): True labels of the data points (shape: [num_points])
+    - cluster_labels (numpy.ndarray): Cluster labels assigned by K-means (shape: [num_points])
 
     Returns:
-    - distance (float): Euclidean distance between the two vectors
+    - accuracy (float): Accuracy score
     """
-    return np.sqrt(np.sum((x1 - x2)**2))
+    num_correct = np.sum(true_labels == cluster_labels)
+    accuracy = num_correct / len(true_labels)
+    return accuracy
 
-def kmeans_from_scratch(X, n_clusters, distance='cosine', max_iter=2):
+def assign_clusters(X, centroids, distance_metric='cosine'):
     """
-    Perform K-means clustering from scratch.
-    
+    Assign data points to the nearest cluster centroid based on the specified distance metric.
+
     Args:
-    - X (numpy.ndarray): Input data points
-    - n_clusters (int): Number of clusters
-    - distance (str): Distance metric to use: 'cosine' or 'euclidean'
-    - max_iter (int): Maximum number of iterations
-    
+    - X (numpy.ndarray): Data points (shape: [num_points, num_features])
+    - centroids (numpy.ndarray): Centroid positions (shape: [num_clusters, num_features])
+    - distance_metric (str): Distance metric to use ('cosine' or 'mahalanobis')
+
     Returns:
-    - labels (numpy.ndarray): Cluster labels for each data point
-    - centroids (numpy.ndarray): Final centroid positions
+    - labels (numpy.ndarray): Cluster labels for each data point (shape: [num_points])
     """
-    print(f"Running kmeans_from_scratch function with distance metric: {distance}")
-    
-    # Initialize centroids randomly
-    centroids_indices = np.random.choice(X.shape[0], n_clusters, replace=False)
-    centroids = X[centroids_indices]
-    
-    # Initialize labels array
-    labels = np.zeros(X.shape[0])
-    
-    # Iterate until convergence or max_iter
-    for iteration in range(max_iter):
-        print(f"Iteration {iteration + 1}/{max_iter}")
-        # Assign each data point to the nearest centroid
-        for i, x in enumerate(X):
-            if distance == 'cosine':
-                distances = cosine_distances([x], centroids)[0]
-            elif distance == 'euclidean':
-                distances = [compute_euclidean_distance(x, centroid) for centroid in centroids]
-            else:
-                raise ValueError("Invalid distance metric. Choose 'cosine' or 'euclidean'.")
-                
-            labels[i] = np.argmin(distances)
-        
-        # Update centroids
-        new_centroids = np.array([X[labels == k].mean(axis=0) for k in range(n_clusters)])
-        
-        # Check for convergence
-        if np.all(centroids == new_centroids):
-            print("Convergence reached.")
-            break
-        
-        centroids = new_centroids
-    
-    print("Finished executing kmeans_from_scratch function.")
-    
-    return labels, centroids
+    if distance_metric == 'mahalanobis':
+        distances = mahalanobis_distance(X, centroids)
+    else:
+        distances = pairwise_distances(X, centroids, metric=distance_metric)
 
-# Load the MNIST dataset using torchvision
-print("Loading MNIST dataset...")
-mnist_train = torchvision.datasets.MNIST(root='./data', train=True, download=True, transform=torchvision.transforms.ToTensor())
-X = mnist_train.data.numpy()
-y = mnist_train.targets.numpy()
+    labels = np.argmin(distances, axis=1)
+    return labels
 
-# Preprocess the data by flattening the images
-print("Preprocessing the data...")
-X_flattened = X.reshape(X.shape[0], -1)
+def mahalanobis_distance(X, centroids):
+    """
+    Compute Mahalanobis distance between data points and centroids.
 
-# Perform K-means clustering with cosine distance
-print("Running K-means clustering with cosine distance...")
-labels_cosine, centroids_cosine = kmeans_from_scratch(X_flattened, n_clusters=5, distance='cosine', max_iter=2)
+    Args:
+    - X (numpy.ndarray): Data points (shape: [num_points, num_features])
+    - centroids (numpy.ndarray): Centroid positions (shape: [num_clusters, num_features])
 
-# Perform K-means clustering with Euclidean distance
-print("Running K-means clustering with Euclidean distance...")
-labels_euclidean, centroids_euclidean = kmeans_from_scratch(X_flattened, n_clusters=5, distance='euclidean', max_iter=2)
+    Returns:
+    - distances (numpy.ndarray): Mahalanobis distances (shape: [num_points, num_clusters])
+    """
+    num_points, num_features = X.shape
+    num_clusters = centroids.shape[0]
 
-# Evaluate clustering performance using silhouette score
-silhouette_avg_cosine = silhouette_score(X_flattened, labels_cosine)
-silhouette_avg_euclidean = silhouette_score(X_flattened, labels_euclidean)
-print(f"Silhouette Score (Cosine Distance): {silhouette_avg_cosine}")
-print(f"Silhouette Score (Euclidean Distance): {silhouette_avg_euclidean}")
+    distances = np.zeros((num_points, num_clusters))
+
+    for b in range(num_points):
+        for c in range(num_clusters):
+            diff = X[b, :] - centroids[c, :]
+            dist = np.sqrt(np.abs(np.sum(np.dot(diff, np.linalg.pinv(np.outer(diff, diff.T))))))
+            distances[b, c] = dist
+
+    return distances
+
+
+# Fetch the MNIST dataset using torchvision
+train_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=ToTensor())
+train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=500, shuffle=True)
+
+# Example usage:
+iteration_count = 1
+ksize = 10
+num_points_per_class = 500  # Use ~500 images per class
+num_features = 28 * 28  # MNIST images are 28x28 pixels
+num_classes = 10  # MNIST has 10 classes (digits 0-9)
+
+# Get data points and true labels for clustering
+X = []
+true_labels = []
+for images, labels in train_loader:
+    images = images.view(images.size(0), -1).numpy()  # Flatten images to 1D arrays
+    X.append(images[:num_points_per_class])
+    true_labels.append(labels[:num_points_per_class])
+X = np.vstack(X)
+true_labels = np.hstack(true_labels)
+
+# Generate random initial centroids for K-means clustering
+centroids = np.random.randn(ksize, num_features)
+
+# Perform K-means clustering iterations using cosine distance
+for a in range(iteration_count):
+    # Assign data points to clusters based on cosine distance
+    labels = assign_clusters(X, centroids, distance_metric='cosine')
+    
+    # Update centroids based on cluster assignments
+    for c in range(ksize):
+        cluster_points = X[labels == c]
+        if len(cluster_points) > 0:
+            centroids[c] = np.mean(cluster_points, axis=0)
+
+# Compute accuracy for cosine distance
+cosine_accuracy = compute_accuracy(true_labels, labels)
+
+print("Accuracy using cosine distance:", cosine_accuracy)
+
+# Perform K-means clustering iterations using Mahalanobis distance
+for a in range(iteration_count):
+    # Assign data points to clusters based on Mahalanobis distance
+    labels = assign_clusters(X, centroids, distance_metric='mahalanobis')
+    
+    # Update centroids based on cluster assignments
+    for c in range(ksize):
+        cluster_points = X[labels == c]
+        if len(cluster_points) > 0:
+            centroids[c] = np.mean(cluster_points, axis=0)
+
+# Compute accuracy for Mahalanobis distance
+mahalanobis_accuracy = compute_accuracy(true_labels, labels)
+
+print("Accuracy using Mahalanobis distance:", mahalanobis_accuracy)
