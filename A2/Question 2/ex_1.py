@@ -13,8 +13,18 @@ def sample_per_class(X, y, n_samples):
 def normalize_features(X):
     return X / 255.0
 
+def cosine_distance(x, centroid):
+    return np.dot(x, centroid) / (np.linalg.norm(x) * np.linalg.norm(centroid))
+
 def kmeans_cosine(X, k, max_iter=100):
-    centroids = X[np.random.choice(len(X), k, replace=False)]
+    # K-means++ initialization
+    centroids = [X[np.random.choice(len(X))]]
+    for _ in range(1, k):
+        distances = np.array([np.min([cosine_distance(x, centroid) for centroid in centroids]) for x in X])
+        prob = distances / np.sum(distances)
+        centroids.append(X[np.random.choice(len(X), p=prob)])
+    centroids = np.array(centroids)
+    
     for _ in range(max_iter):
         distances = cosine_distances(X, centroids)
         labels = np.argmin(distances, axis=1)
@@ -29,10 +39,18 @@ def mahalanobis_distance(x, centroid, cov_inv):
     return np.sqrt(np.dot(np.dot(diff, cov_inv), diff.T))
 
 def kmeans_mahalanobis(X, k, max_iter=100):
-    centroids = X[np.random.choice(len(X), k, replace=False)]
+    # K-means++ initialization
+    centroids = [X[np.random.choice(len(X))]]
+    cov_inv = np.linalg.pinv(np.cov(X.T))
+    for _ in range(1, k):
+        distances = np.array([np.min([mahalanobis_distance(x, centroid, cov_inv) for centroid in centroids]) for x in X])
+        prob = distances / np.sum(distances)
+        centroids.append(X[np.random.choice(len(X), p=prob)])
+    centroids = np.array(centroids)
+       
+    
     for _ in range(max_iter):
-        cov_inv = np.linalg.pinv(np.cov(X.T))
-        distances = np.array([mahalanobis_distance(x, centroid, cov_inv) for x in X for centroid in centroids])
+        distances = np.array([mahalanobis_distance(x, centroid, cov_inv) for centroid in centroids for x in X])
         distances = distances.reshape((len(X), k))
         labels = np.argmin(distances, axis=1)
         new_centroids = np.array([X[labels == i].mean(axis=0) for i in range(k)])
@@ -46,6 +64,11 @@ transform = transforms.Compose([transforms.ToTensor()])
 mnist_trainset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
 X, y = mnist_trainset.data.numpy(), mnist_trainset.targets.numpy()
 X = X.reshape(X.shape[0], -1)
+
+# Preprocess data to handle NaN values
+nan_indices = np.isnan(X)
+X[nan_indices] = 0  # Replace NaN values with zeros
+X = X[~np.any(nan_indices, axis=1)]  # Remove rows containing NaN values
 
 # Sample approximately 500 images per class
 X_sampled, y_sampled = sample_per_class(X, y, n_samples=500)

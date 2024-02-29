@@ -30,9 +30,29 @@ def cluster_consistency(labels, cluster_labels, num_classes):
     overall_consistency = np.mean(cluster_consistency_values)
     return overall_consistency
 
+# Function to compute clustering accuracy
+def clustering_accuracy(labels, cluster_labels, num_classes):
+    correct = 0
+    for cluster_label in np.unique(cluster_labels):
+        cluster_indices = np.where(cluster_labels == cluster_label)[0]
+        cluster_class_counts = np.zeros(num_classes)
+        for i in cluster_indices:
+            cluster_class_counts[labels[i]] += 1
+        most_common_class = np.argmax(cluster_class_counts)
+        correct += cluster_class_counts[most_common_class]
+    accuracy = (correct / len(labels))*100
+    return accuracy
+
 # Function to perform K-means clustering with cosine distance
 def kmeans_cosine(X, k, max_iter=30):
-    centroids = X[np.random.choice(len(X), k, replace=False)]
+    # K-means++ initialization
+    centroids = [X[np.random.choice(len(X))]]
+    for _ in range(1, k):
+        distances = np.array([np.min(cosine_distances(x.reshape(1, -1), centroids)) for x in X])
+        prob = distances / np.sum(distances)
+        centroids.append(X[np.random.choice(len(X), p=prob)])
+    centroids = np.array(centroids)
+    
     for _ in range(max_iter):
         distances = cosine_distances(X, centroids)
         labels = np.argmin(distances, axis=1)
@@ -76,22 +96,34 @@ X_sampled = normalize_features(X_sampled)
 # Define values of k
 k_values = [5, 10, 20, 40, 200]
 
-# Calculate cluster consistency for each value of k using cosine distance
-print("Cluster consistency using cosine distance:")
+# Calculate cluster consistency and accuracy for each value of k using cosine distance
+print("Results using cosine distance:")
 for k in k_values:
+    print(f"  k={k}:")
+    
     # Apply K-means clustering with cosine distance
     labels_cosine, _ = kmeans_cosine(X_sampled, k)
     
     # Calculate cluster consistency
     consistency = cluster_consistency(y_sampled, labels_cosine, num_classes=10)
-    print(f"  k={k}: {consistency:.4f}")
+    print(f"    Cluster consistency: {consistency:.4f}")
+    
+    # Calculate clustering accuracy
+    accuracy = clustering_accuracy(y_sampled, labels_cosine, num_classes=10)
+    print(f"    Clustering accuracy: {accuracy:.2f}%")
 
-# Calculate cluster consistency for each value of k using Mahalanobis distance
-print("\nCluster consistency using Mahalanobis distance:")
+# Calculate cluster consistency and accuracy for each value of k using Mahalanobis distance
+print("\nResults using Mahalanobis distance:")
 for k in k_values:
+    print(f"  k={k}:")
+    
     # Apply K-means clustering with Mahalanobis distance
     labels_mahalanobis, _ = kmeans_mahalanobis(X_sampled, k)
     
     # Calculate cluster consistency
     consistency = cluster_consistency(y_sampled, labels_mahalanobis, num_classes=10)
-    print(f"  k={k}: {consistency:.4f}")
+    print(f"    Cluster consistency: {consistency:.4f}")
+    
+    # Calculate clustering accuracy
+    accuracy = clustering_accuracy(y_sampled, labels_mahalanobis, num_classes=10)
+    print(f"    Clustering accuracy: {accuracy:.2f}%")
