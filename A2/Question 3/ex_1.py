@@ -112,118 +112,215 @@
 
 
 
-
-
-
 import numpy as np
-import torch
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import pairwise_distances
-from torchvision import datasets, transforms
+import torchvision.datasets as datasets
+import torchvision.transforms as transforms
+from sklearn.metrics.pairwise import cosine_distances
+
+# Function to sample approximately n_samples per class
+def sample_per_class(X, y, n_samples):
+    sampled_indices = []
+    for label in np.unique(y):
+        indices = np.where(y == label)[0]
+        sampled_indices.extend(np.random.choice(indices, n_samples, replace=False))
+    return X[sampled_indices], y[sampled_indices]
+
+# Function to normalize features
+def normalize_features(X):
+    return X / 255.0
+
+# Function to compute clustering accuracy
+def clustering_accuracy(labels, cluster_labels, num_classes):
+    correct = 0
+    for cluster_label in np.unique(cluster_labels):
+        cluster_indices = np.where(cluster_labels == cluster_label)[0]
+        if len(cluster_indices) > 0:
+            cluster_class_counts = np.bincount(labels[cluster_indices], minlength=num_classes)
+            most_common_class = np.argmax(cluster_class_counts)
+            correct += cluster_class_counts[most_common_class]
+    accuracy = (correct / len(labels)) * 100
+    return accuracy
+
+# Function to initialize centroids using K-means++ algorithm
+def kmeans_plusplus_init(X, k):
+    centroids = [X[np.random.choice(len(X))]]  # Select the first centroid randomly
+    for _ in range(1, k):
+        distances = np.array([np.min([np.linalg.norm(x - centroid) for centroid in centroids]) for x in X])
+        prob = distances / np.sum(distances)
+        next_centroid_index = np.random.choice(len(X), p=prob)
+        centroids.append(X[next_centroid_index])
+    return np.array(centroids)
+
+# Function to perform K-means clustering with cosine distance
+def kmeans_cosine(X, k, max_iter=30):
+    # Initialize centroids using K-means++
+    centroids = kmeans_plusplus_init(X, k)
+    
+    for _ in range(max_iter):
+        distances = cosine_distances(X, centroids)
+        labels = np.argmin(distances, axis=1)
+        new_centroids = np.array([X[labels == i].mean(axis=0) for i in range(k)])
+        if np.allclose(centroids, new_centroids):  # Check for convergence
+            break
+        centroids = new_centroids
+    return labels
 
 # Function to calculate Mahalanobis distance
 def mahalanobis_distance(x, centroid, cov_inv):
     diff = x - centroid
     return np.sqrt(np.dot(np.dot(diff, cov_inv), diff.T))
 
-# K-means algorithm using Mahalanobis distance
+# Function to perform K-means clustering with Mahalanobis distance
 def kmeans_mahalanobis(X, k, max_iter=30):
-    centroids = X[np.random.choice(len(X), k, replace=False)]
+    # Initialize centroids using K-means++
+    centroids = kmeans_plusplus_init(X, k)
+    
     for _ in range(max_iter):
         cov_inv = np.linalg.pinv(np.cov(X.T))
         distances = np.array([mahalanobis_distance(x, centroid, cov_inv) for x in X for centroid in centroids])
         distances = distances.reshape((len(X), k))
         labels = np.argmin(distances, axis=1)
         new_centroids = np.array([X[labels == i].mean(axis=0) for i in range(k)])
-        if np.all(centroids == new_centroids):
+        if np.allclose(centroids, new_centroids):  # Check for convergence
             break
         centroids = new_centroids
-    return labels, centroids
+    return labels
 
-# Function to initialize GMM parameters
-def initialize_parameters(X, k):
-    pca = PCA(n_components=5)
-    X_pca = pca.fit_transform(X)
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X_pca)
-    kmeans_labels, kmeans_centers = kmeans_mahalanobis(X_scaled, k)
-    return kmeans_labels, kmeans_centers, pca, scaler
-
-# E-step: Compute responsibilities
-def e_step(X, centers, cov_inv):
-    n_samples = len(X)
-    n_clusters = len(centers)
-    responsibilities = np.zeros((n_samples, n_clusters))
-    for i in range(n_samples):
-        for j in range(n_clusters):
-            responsibilities[i, j] = np.exp(-0.5 * mahalanobis_distance(X[i], centers[j], cov_inv[j]))
-    responsibilities /= np.sum(responsibilities, axis=1, keepdims=True)
-    return responsibilities
-
-# M-step: Update parameters
-def m_step(X, responsibilities):
-    n_clusters = responsibilities.shape[1]
-    new_centers = np.zeros_like(centers)
-    for j in range(n_clusters):
-        new_centers[j] = np.dot(responsibilities[:, j], X) / np.sum(responsibilities[:, j])
-    return new_centers
-
-# Log-likelihood calculation
-def log_likelihood(X, centers, cov_inv, responsibilities):
-    n_samples = len(X)
-    n_clusters = len(centers)
-    log_likelihood = 0
-    for i in range(n_samples):
-        for j in range(n_clusters):
-            log_likelihood += responsibilities[i, j] * mahalanobis_distance(X[i], centers[j], cov_inv[j])
-    return log_likelihood
-
-# Gaussian Mixture Model algorithm
-def gmm(X, k, max_iter=100, tol=1e-5):
-    # Initialization
-    kmeans_labels, centers, pca, scaler = initialize_parameters(X, k)
-    cov_inv = [np.linalg.pinv(np.cov(X[kmeans_labels == j].T)) for j in range(k)]
-    n_samples = len(X)
-
-    # EM iterations
+# Function to perform GMM clustering with cosine distance
+def gmm_cosine(X, k, max_iter=100, tol=1e-4):
+    # Initialize centroids using K-means++
+    centroids = kmeans_plusplus_init(X, k)
+    num_samples, num_features = X.shape
+    num_classes = len(np.unique(y_sampled))
+    prior_probs = np.ones(k) / k
+    
+    # Initialize covariance matrices as identity matrices
+    covariances = np.stack([np.eye(num_features) for _ in range(k)])
+    
+    # Initialize responsibilities matrix
+    responsibilities = np.zeros((num_samples, k))
+    
     for _ in range(max_iter):
-        # E-step
-        responsibilities = e_step(X, centers, cov_inv)
-        # M-step
-        new_centers = m_step(X, responsibilities)
-        # Log-likelihood calculation
-        ll_old = log_likelihood(X, centers, cov_inv, responsibilities)
-        # Update parameters
-        centers = new_centers
-        cov_inv = [np.linalg.pinv(np.cov(X[kmeans_labels == j].T)) for j in range(k)]
-        # Check convergence
-        ll_new = log_likelihood(X, centers, cov_inv, responsibilities)
-        if np.abs(ll_new - ll_old) <= tol * np.abs(ll_new):
+        # E-step: Update responsibilities
+        for j in range(k):
+            diff = X - centroids[j]
+            distances = np.sqrt(np.sum(np.square(diff), axis=1))
+            responsibilities[:, j] = np.exp(-0.5 * distances)
+        responsibilities /= responsibilities.sum(axis=1, keepdims=True)
+        
+        # M-step: Update parameters
+        for j in range(k):
+            weights = responsibilities[:, j]
+            centroids[j] = np.average(X, axis=0, weights=weights)
+            diff = X - centroids[j]
+            covariances[j] = np.dot(weights * diff.T, diff) / weights.sum()
+        
+        # Compute log-likelihood
+        log_likelihood = -np.sum(np.log(np.sum(responsibilities, axis=1)))
+        
+        # Check for convergence
+        if _ > 0 and np.abs(log_likelihood - prev_log_likelihood) < tol * np.abs(log_likelihood):
             break
+        prev_log_likelihood = log_likelihood
+    
+    return np.argmax(responsibilities, axis=1)
 
-    return centers
+# Function to perform GMM clustering with Mahalanobis distance
+def gmm_mahalanobis(X, k, max_iter=100, tol=1e-4):
+    # Initialize centroids using K-means++
+    centroids = kmeans_plusplus_init(X, k)
+    num_samples, num_features = X.shape
+    num_classes = len(np.unique(y_sampled))
+    prior_probs = np.ones(k) / k
+    
+    # Initialize covariance matrices as identity matrices
+    covariances = np.stack([np.eye(num_features) for _ in range(k)])
+    
+    # Initialize responsibilities matrix
+    responsibilities = np.zeros((num_samples, k))
+    
+    for _ in range(max_iter):
+        # E-step: Update responsibilities
+        for j in range(k):
+            diff = X - centroids[j]
+            distances = np.array([mahalanobis_distance(x, centroids[j], np.linalg.pinv(covariances[j])) for x in X])
+            responsibilities[:, j] = np.exp(-0.5 * distances)
+        responsibilities /= responsibilities.sum(axis=1, keepdims=True)
+        
+        # M-step: Update parameters
+        for j in range(k):
+            weights = responsibilities[:, j]
+            centroids[j] = np.average(X, axis=0, weights=weights)
+            diff = X - centroids[j]
+            covariances[j] = np.dot(weights * diff.T, diff) / weights.sum()
+        
+        # Compute log-likelihood
+        log_likelihood = -np.sum(np.log(np.sum(responsibilities, axis=1)))
+        
+        # Check for convergence
+        if _ > 0 and np.abs(log_likelihood - prev_log_likelihood) < tol * np.abs(log_likelihood):
+            break
+        prev_log_likelihood = log_likelihood
+    
+    return np.argmax(responsibilities, axis=1)
+
+# Function to calculate cluster consistency
+def cluster_consistency(labels, cluster_labels, num_classes):
+    cluster_consistency_values = []
+    for cluster_label in np.unique(cluster_labels):
+        cluster_indices = np.where(cluster_labels == cluster_label)[0]
+        if len(cluster_indices) > 0:
+            class_counts = np.bincount(labels[cluster_indices], minlength=num_classes)
+            most_common_class_count = np.max(class_counts)
+            total_cluster_points = len(cluster_indices)
+            cluster_consistency = most_common_class_count / total_cluster_points
+            cluster_consistency_values.append(cluster_consistency)
+    overall_consistency = np.mean(cluster_consistency_values)
+    return overall_consistency
 
 # Fetch MNIST dataset using torchvision
-def fetch_mnist():
-    transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))])
-    train_set = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
-    test_set = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=64, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(test_set, batch_size=64, shuffle=False)
-    return train_loader, test_loader
+transform = transforms.Compose([transforms.ToTensor()])
+mnist_trainset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+X, y = mnist_trainset.data.numpy(), mnist_trainset.targets.numpy()
+X = X.reshape(X.shape[0], -1)
 
-# Main function to run GMM on MNIST dataset
-def main():
-    train_loader, test_loader = fetch_mnist()
-    X_train = train_loader.dataset.data.numpy().reshape(-1, 784)
-    X_test = test_loader.dataset.data.numpy().reshape(-1, 784)
+# Sample approximately 500 images per class
+X_sampled, y_sampled = sample_per_class(X, y, n_samples=500)
 
-    for k in [5, 10, 20, 30]:
-        # Fit GMM
-        centers = gmm(X_train, k)
-        # Perform classification using Bayes classifier
-        # Report accuracy on test set
+# Normalize features
+X_sampled = normalize_features(X_sampled)
 
-if __name__ == "__main__":
-    main()
+# Define values of k
+k_values = [5, 10, 20, 40]
+
+# Calculate clustering accuracy and consistency for each value of k using cosine distance
+print("Results using cosine distance:")
+for k in k_values:
+    print(f"  k={k}:")
+    
+    # Apply GMM clustering with cosine distance
+    labels_cosine = gmm_cosine(X_sampled, k)
+    
+    # Calculate clustering accuracy
+    accuracy = clustering_accuracy(y_sampled, labels_cosine, num_classes=10)
+    print(f"    Clustering accuracy: {accuracy:.4f}")
+    
+    # Calculate clustering consistency
+    consistency = cluster_consistency(y_sampled, labels_cosine, num_classes=10)
+    print(f"    Cluster consistency: {consistency:.4f}")
+
+# Calculate clustering accuracy and consistency for each value of k using Mahalanobis distance
+print("\nResults using Mahalanobis distance:")
+for k in k_values:
+    print(f"  k={k}:")
+    
+    # Apply GMM clustering with Mahalanobis distance
+    labels_mahalanobis = gmm_mahalanobis(X_sampled, k)
+    
+    # Calculate clustering accuracy
+    accuracy = clustering_accuracy(y_sampled, labels_mahalanobis, num_classes=10)
+    print(f"    Clustering accuracy: {accuracy:.4f}")
+    
+    # Calculate clustering consistency
+    consistency = cluster_consistency(y_sampled, labels_mahalanobis, num_classes=10)
+    print(f"    Cluster consistency: {consistency:.4f}")
