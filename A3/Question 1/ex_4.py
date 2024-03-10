@@ -1,12 +1,141 @@
+# import numpy as np
+# import torchvision.datasets as datasets
+# import torchvision.transforms as transforms
+# from sklearn.decomposition import PCA
+# import matplotlib.pyplot as plt
+
+
+# # Define the logistic function (sigmoid)
+# def sigmoid(z):
+#     return 1 / (1 + np.exp(-z))
+
+# # Define the gradient of the logistic function
+# def sigmoid_gradient(z):
+#     return sigmoid(z) * (1 - sigmoid(z))
+
+# # Define the cost function for logistic regression
+# def cost_function(X, y, theta):
+#     m = len(y)
+#     h = sigmoid(np.dot(X, theta))
+#     cost = -(1 / m) * np.sum(y * np.log(h) + (1 - y) * np.log(1 - h))
+#     return cost
+
+# # Define the gradient descent algorithm
+# def gradient_descent(X, y, theta, alpha, num_epochs=100):
+#     m = len(y)
+#     costs = []
+#     for _ in range(num_epochs):
+#         h = sigmoid(np.dot(X, theta))
+#         gradient = (1 / m) * np.dot(X.T, (h - y))
+#         theta -= alpha * gradient
+#         cost = cost_function(X, y, theta)
+#         costs.append(cost)
+#     return theta, costs
+
+# transform = transforms.Compose([
+#     transforms.ToTensor(),  # Convert images to tensors
+#     transforms.Normalize((0.5,), (0.5,))  # Normalize images
+# ])
+
+# mnist_trainset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+# X, y = mnist_trainset.data.numpy(), mnist_trainset.targets.numpy()
+
+# # Keep only the data for digits 3 and 4
+# X_filtered = X[(y == 3) | (y == 4)]
+# y_filtered = y[(y == 3) | (y == 4)]
+
+# # Flatten the images and standardize the features
+# X_flat = X_filtered.reshape(X_filtered.shape[0], -1)
+# X_flat = X_flat / 255.0
+
+# # Perform PCA to reduce dimensionality to 2D
+# pca = PCA(n_components=2)
+# X_pca = pca.fit_transform(X_flat)
+
+# # Add bias term to the feature matrix
+# X_pca_bias = np.hstack((np.ones((X_pca.shape[0], 1)), X_pca))
+
+# # Define labels for binary classification (3 vs 4)
+# y_binary = (y_filtered == 3).astype(int)
+
+# # Initialize parameters for logistic regression
+# theta_init = np.ones(X_pca_bias.shape[1])  # Fix bias term to a non-zero value
+
+# # Train logistic regression model using gradient descent
+# alpha = 0.01
+# num_epochs = 100
+
+# theta_trained, costs = gradient_descent(X_pca_bias, y_binary, theta_init, alpha, num_epochs=num_epochs)
+
+# # Calculate predictions
+# y_pred = sigmoid(np.dot(X_pca_bias, theta_trained))
+# y_pred_class = (y_pred >= 0.5).astype(int)
+
+# # Calculate errors
+# train_error = np.mean(y_pred_class != y_binary)
+# train_loss = cost_function(X_pca_bias, y_binary, theta_trained)
+
+# print("Number of Epochs:", num_epochs)
+# print("Training Error:", train_error)
+# print("Training Loss:", train_loss)
+
+# # Plot the results
+# plt.figure(figsize=(12, 12))
+
+# # Plot training error
+# plt.subplot(2, 2, 1)
+# plt.plot(range(1, num_epochs + 1), [np.mean(y_pred_class[:i] != y_binary[:i]) for i in range(1, num_epochs + 1)])
+# plt.xlabel('Number of Epochs')
+# plt.ylabel('Training Error')
+# plt.title('Training Error vs Number of Epochs')
+
+# # Plot test error
+# plt.subplot(2, 2, 2)
+# plt.plot(range(1, num_epochs + 1), [np.mean((sigmoid(np.dot(X_pca_bias[:i], theta_trained)) >= 0.5).astype(int) != y_binary[:i]) for i in range(1, num_epochs + 1)])
+# plt.xlabel('Number of Epochs')
+# plt.ylabel('Test Error')
+# plt.title('Test Error vs Number of Epochs')
+
+# # Plot training loss
+# plt.subplot(2, 2, 3)
+# plt.plot(range(1, num_epochs + 1), costs)
+# plt.xlabel('Number of Epochs')
+# plt.ylabel('Training Loss')
+# plt.title('Training Loss vs Number of Epochs')
+
+# # Calculate test loss
+# test_loss = [cost_function(X_pca_bias[:i], y_binary[:i], theta_trained) for i in range(1, num_epochs + 1)]
+
+# # Plot test loss
+# plt.subplot(2, 2, 4)
+# plt.plot(range(1, num_epochs + 1), test_loss)
+# plt.xlabel('Number of Epochs')
+# plt.ylabel('Test Loss')
+# plt.title('Test Loss vs Number of Epochs')
+
+# plt.tight_layout(h_pad=3)
+# plt.show()
+
+
+
+
+
+
+
 import numpy as np
-import torch
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
+from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
+
 
 # Define the logistic function (sigmoid)
 def sigmoid(z):
     return 1 / (1 + np.exp(-z))
+
+# Define the gradient of the logistic function
+def sigmoid_gradient(z):
+    return sigmoid(z) * (1 - sigmoid(z))
 
 # Define the cost function for logistic regression
 def cost_function(X, y, theta):
@@ -15,94 +144,98 @@ def cost_function(X, y, theta):
     cost = -(1 / m) * np.sum(y * np.log(h) + (1 - y) * np.log(1 - h))
     return cost
 
-# Define the gradient of the cost function for logistic regression
-def gradient(X, y, theta):
-    m = len(y)
-    h = sigmoid(np.dot(X, theta))
-    grad = (1 / m) * np.dot(X.T, (h - y))
-    return grad
-
-# Gradient descent algorithm for logistic regression
-def gradient_descent(X, y, theta, alpha, num_epochs=100, tol=1e-5):
+# Define the gradient descent algorithm
+def gradient_descent(X, y, theta, alpha, num_epochs=100):
     m = len(y)
     costs = []
-    for epoch in range(num_epochs):
-        grad = gradient(X, y, theta)
-        theta -= alpha * grad
+    for _ in range(num_epochs):
+        h = sigmoid(np.dot(X, theta))
+        gradient = (1 / m) * np.dot(X.T, (h - y))
+        theta -= alpha * gradient
         cost = cost_function(X, y, theta)
         costs.append(cost)
-        # Check for convergence
-        if epoch > 0 and abs(costs[epoch - 1] - costs[epoch]) < tol:
-            break
     return theta, costs
 
-# Load the MNIST dataset using torchvision
 transform = transforms.Compose([
     transforms.ToTensor(),  # Convert images to tensors
     transforms.Normalize((0.5,), (0.5,))  # Normalize images
 ])
 
 mnist_trainset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
-mnist_testset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+X, y = mnist_trainset.data.numpy(), mnist_trainset.targets.numpy()
 
-# Define binary classification for digits/classes 3 and 4
-classes = [3, 4]
+# Keep only the data for digits 3 and 4
+X_filtered = X[(y == 3) | (y == 4)]
+y_filtered = y[(y == 3) | (y == 4)]
 
-# Filter dataset for selected classes
-train_indices = torch.tensor([i for i in range(len(mnist_trainset.targets)) if mnist_trainset.targets[i] in classes])
-test_indices = torch.tensor([i for i in range(len(mnist_testset.targets)) if mnist_testset.targets[i] in classes])
+# Flatten the images and standardize the features
+X_flat = X_filtered.reshape(X_filtered.shape[0], -1)
+X_flat = X_flat / 255.0
 
-train_loader = torch.utils.data.DataLoader(dataset=mnist_trainset, batch_size=len(train_indices), sampler=torch.utils.data.SubsetRandomSampler(train_indices))
-test_loader = torch.utils.data.DataLoader(dataset=mnist_testset, batch_size=len(test_indices), sampler=torch.utils.data.SubsetRandomSampler(test_indices))
+# Perform PCA to reduce dimensionality to 2D
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(X_flat)
 
-# Flatten the images and add bias term (with fixed non-zero value)
-X_train = torch.flatten(next(iter(train_loader))[0], start_dim=1).numpy()
-X_train = np.hstack((np.ones((X_train.shape[0], 1)), X_train))
-X_train[:, 0] = 1  # Fix the bias term to a non-zero value (e.g., 1)
-y_train = (next(iter(train_loader))[1] == classes[0]).numpy().astype(int)
+# Add bias term to the feature matrix
+X_pca_bias = np.hstack((np.ones((X_pca.shape[0], 1)), X_pca))
 
-X_test = torch.flatten(next(iter(test_loader))[0], start_dim=1).numpy()
-X_test = np.hstack((np.ones((X_test.shape[0], 1)), X_test))
-X_test[:, 0] = 1  # Fix the bias term to a non-zero value (e.g., 1)
-y_test = (next(iter(test_loader))[1] == classes[0]).numpy().astype(int)
+# Define labels for binary classification (3 vs 4)
+y_binary = (y_filtered == 3).astype(int)
 
 # Initialize parameters for logistic regression
-theta_init = np.zeros(X_train.shape[1])
+theta_init = np.ones(X_pca_bias.shape[1])  # Fix bias term to a non-zero value
 
 # Train logistic regression model using gradient descent
-alpha = 0.1
+alpha = 0.01
 num_epochs = 100
-theta_trained, costs = gradient_descent(X_train, y_train, theta_init, alpha, num_epochs)
+
+theta_trained, costs = gradient_descent(X_pca_bias, y_binary, theta_init, alpha, num_epochs=num_epochs)
 
 # Calculate predictions
-def predict(X, theta):
-    return sigmoid(np.dot(X, theta))
+y_pred = sigmoid(np.dot(X_pca_bias, theta_trained))
+y_pred_class = (y_pred >= 0.5).astype(int)
 
-y_train_pred = predict(X_train, theta_trained)
-y_test_pred = predict(X_test, theta_trained)
+# Calculate errors
+train_error = np.mean(y_pred_class != y_binary)
+train_loss = cost_function(X_pca_bias, y_binary, theta_trained)
 
-# Calculate errors and losses
-train_error = np.mean((y_train_pred >= 0.5) != y_train)
-test_error = np.mean((y_test_pred >= 0.5) != y_test)
-train_loss = cost_function(X_train, y_train, theta_trained)
-test_loss = cost_function(X_test, y_test, theta_trained)
-
-# Print and plot the results
+print("Number of Epochs:", num_epochs)
 print("Training Error:", train_error)
-print("Test Error:", test_error)
 print("Training Loss:", train_loss)
-print("Test Loss:", test_loss)
 
-plt.figure(figsize=(12, 8))
+# Plot the results
+plt.figure(figsize=(12, 12))
 
 # Plot training error
-plt.subplot(221)
-plt.plot(range(num_epochs), [(y_train_pred >= 0.5) != y_train for y_train_pred in predict(X_train, theta_trained)], label='Training Error')
+plt.subplot(2, 2, 1)
+plt.plot(range(1, num_epochs + 1), [np.mean(y_pred_class[:i] != y_binary[:i]) for i in range(1, num_epochs + 1)])
 plt.xlabel('Number of Epochs')
-plt.ylabel('Error')
+plt.ylabel('Training Error')
 plt.title('Training Error vs Number of Epochs')
 
 # Plot test error
-plt.subplot(222)
-plt.plot(range(num_epochs), [(y_test_pred >= 0.5) != y_test for y_test_pred in predict(X_test, theta_trained)], label='Test Error')
-plt
+plt.subplot(2, 2, 2)
+plt.plot(range(1, num_epochs + 1), [np.mean((sigmoid(np.dot(X_pca_bias[:i], theta_trained)) >= 0.5).astype(int) != y_binary[:i]) for i in range(1, num_epochs + 1)])
+plt.xlabel('Number of Epochs')
+plt.ylabel('Test Error')
+plt.title('Test Error vs Number of Epochs')
+
+# Plot training loss
+plt.subplot(2, 2, 3)
+plt.plot(range(1, num_epochs + 1), costs)
+plt.xlabel('Number of Epochs')
+plt.ylabel('Training Loss')
+plt.title('Training Loss vs Number of Epochs')
+
+# Calculate test loss
+test_loss = [cost_function(X_pca_bias[:i], y_binary[:i], theta_trained) for i in range(1, num_epochs + 1)]
+
+# Plot test loss
+plt.subplot(2, 2, 4)
+plt.plot(range(1, num_epochs + 1), test_loss)
+plt.xlabel('Number of Epochs')
+plt.ylabel('Test Loss')
+plt.title('Test Loss vs Number of Epochs')
+
+plt.tight_layout(h_pad=3)
+plt.show()
